@@ -3,13 +3,19 @@
 ## This script will download, collect, and tidy all the data
 ## provided by www.bundeswahlleiter.de
 
-## Loading require packages
+## Loading require packages for the import and cleaning of the data
 library( tidyr )
 library( dplyr )
 library( tibble )
-library( ggplot2 )
 library( readr )
 library( stringr )
+## Packages required to handle the shape polygons and to plot the
+## results. Be sure to have the packages 'geos', 'geos-devel',
+## and 'gdal' installed on your system.
+library( rgdal )
+library( maptools )
+library( ggplot2 )
+
 
 ####################################################################
 ##################### Download the provided data ###################
@@ -190,3 +196,78 @@ file.2017 <- files.csv[ !is.na( str_match( files.csv, "btw17" ) ) ]
 current.election <- tidy.data( file.2017 )
 save( current.election, file = paste0( download.folder,
                                       "current_election.RData" ) )
+
+####################################################################
+##################### Shapes of the election districts #############
+####################################################################
+## This URL contains all the geographical information.
+election.districts.url <- "https://www.bundeswahlleiter.de/dam/jcr/f92e42fa-44f1-47e5-b775-924926b34268/btw17_geometrie_wahlkreise_geo_shp.zip"
+## For convenience reason let's split the URL at all '/'. This way
+## we can directly access the file name.
+## Download
+election.districts.url.split <- str_split(
+    election.districts.url, "/" )
+download.file( url = election.districts.url,
+              destfile = paste0( download.folder,
+                                election.districts.url.split[ 7 ] ),
+              method = "wget" )
+## Extract the data for the election districts
+unzip( paste0( download.folder, election.districts.url.split[ 7 ] ),
+      exdir = download.folder )
+
+## Import all the spatial information into one single data object.
+
+## https://github.com/tidyverse/ggplot2/wiki/plotting-polygon-shapefiles
+election.districts <- readOGR( dsn = paste0( download.folder, "." ),
+                              layer = "Geometrie_Wahlkreise_19DBT_geo" )
+## If you want to access content of the spatial object 'election.districts'
+## you have to use the '@' symbol. This is necessary since the 'rgdal'
+## packages uses the more strict (and oldschool) S4 object class for its
+## implementation. See http://adv-r.had.co.nz/OO-essentials.html#s4
+
+## Converting the spatial object into a data.frame better suited
+## for the 'ggplot2' package.
+election.districts.df <- fortify( election.districts )
+
+## Convert the IDs of the polygons to the same key used to
+## identify the election districts.
+election.districts.df$election.district.number <-
+  as.numeric( election.districts.df$id ) + 1
+
+## Exclude the counties (since they cause the
+## election.district.number to be not unique )
+current.election.no.counties <- filter( current.election,
+                                       county.number != 99 )
+
+## The amount of 2nd votes for the leftists (die Linke)
+counts.leftists.second.vote <-
+  filter( current.election.no.counties,
+         confirmation.status == "Vorläufig" &
+         type.of.vote == "Zweitstimmen",
+         party == "DIE LINKE" )
+
+## Select just the 'election.district.number' key and the
+## 'counts' value (number of votes)
+counts.leftists.second.vote <- select(
+    counts.leftists.second.vote, election.district.number,
+    counts )
+
+## Add the counts to all points of the corresponding polygons
+election.districts.df <- left_join( election.districts.df,
+                                   counts.leftists.second.vote,
+                                   by ="election.district.number")
+
+## 'coord_quickmap()' ensures the axis to be of the right ratio
+## to prevent a stretching of the displayed map.
+
+ggplot() + geom_polygon( data = election.districts.df,
+                        aes( x = long, y = lat, group = group,
+                            alpha = counts ),
+                        color = 'black', fill = '#df0404' ) +
+coord_quickmap() + theme_minimal() + xlab( "" ) + ylab( "" ) +
+  scale_alpha_continuous( guide = FALSE )
+ggsave( "../res/leftists-second-vote.png" )  
+
+## Better use 'ggmap' instead of 'ggplot2'
+## https://github.com/dkahle/ggmap
+## But I have to fork and fix the 'maps' package first.

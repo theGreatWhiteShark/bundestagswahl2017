@@ -21,4 +21,4 @@ This file contains all the references to the data as well as the data itself.
 
 # Scripts
 
-The [bundeswahlleiter.R](data/bundeswahlleiter.R) script contains some R code to download and tidy the data provided by the [bundeswahlleiter.de](https://www.bundeswahlleiter.de/bundestagswahlen/2017.html) web page.
+The [bundeswahlleiter.R](bundeswahlleiter.R) script contains some R code to download and tidy the data provided by the [bundeswahlleiter.de](https://www.bundeswahlleiter.de/bundestagswahlen/2017.html) web page.
