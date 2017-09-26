@@ -1,4 +1,4 @@
-![left-winged-Germay](res/leftists-second-vote.png)
+![left-winged-Germay](res/cartogram_newman_die_linke.png)
 
 In this projects we want to have a look at various data of the election of the Bundestag 2017 as well as various statistics of the city of Dresden.
 
@@ -7,6 +7,10 @@ We want to raise some important and maybe controversial questions and hypothesis
 # Data
 
 The [data](data) folder will contain all the references and scripts to download, extract, and tidy the data.
+
+# Scripts
+
+The [cartogram_newman.R](cartogram_newman.R) script uses the diffusion-based method of Mark Newman et al. to produce a cartograms from the election results and the polygons of the election districts.
 
 ---
 

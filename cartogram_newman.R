@@ -53,11 +53,11 @@ number.of.grid.points.x <- round( number.of.grid.points.y/ 2 )
 ## We will use the SpatialPoints object instead of a data.frame
 ## here, since it is required by the sp::over function we'll
 ## use in the next step.
-density.grid.x <-  seq( election.districts.range[ 1, 1 ] - 5,
-                       election.districts.range[ 1, 2 ] + 5,
+density.grid.x <-  seq( election.districts.range[ 1, 1 ],
+                       election.districts.range[ 1, 2 ],
                        length.out = number.of.grid.points.x )
-density.grid.y <-  seq( election.districts.range[ 2, 1 ] - 5 ,
-                       election.districts.range[ 2, 2 ] + 5,
+density.grid.y <-  seq( election.districts.range[ 2, 1 ],
+                       election.districts.range[ 2, 2 ],
                        length.out = number.of.grid.points.y )
 density.grid <- SpatialPoints( expand.grid(
     density.grid.x, density.grid.y ),
