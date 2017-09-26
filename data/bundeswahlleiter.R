@@ -15,26 +15,31 @@ library( stringr )
 ##################### Download the provided data ###################
 ####################################################################
 ## Save all data in a separate folder (within the current one)
-download.folder <- "bundeswahlleiter_test/"
+download.folder <- "bundeswahlleiter/"
 if ( !dir.exists( download.folder ) ){
   dir.create( download.folder )
 }
-## URL pointing to the file containing the results for all of Germany
-data.germany.url <- "https://www.bundeswahlleiter.de/dam/jcr/72f186bb-aa56-47d3-b24c-6a46f5de22d0/btw17_kerg.csv"
-## URL pointing to the zip file containing the results for the
-## individual Wahlbezirke
-data.wahlbezirke.url <- "https://www.bundeswahlleiter.de/dam/jcr/ce2d2b6a-f211-4355-8eea-355c98cd4e47/btw_kerg.zip"
-
+## URL pointing to the file containing the results for all of Germany.
+data.election.url <-
+  "https://www.bundeswahlleiter.de/dam/jcr/72f186bb-aa56-47d3-b24c-6a46f5de22d0/btw17_kerg.csv"
 ## Download
-download.file( url = data.germany.url,
+download.file( url = data.election.url,
               destfile = paste0( download.folder, "btw17_kerg.csv" ),
               method = "wget" )
-download.file( url = data.wahlbezirke.url,
-              destfile = paste0( download.folder, "btw_kerg.zip" ),
-              method = "wget" )
-## Extract the data for the Wahlkreise
-unzip( paste0( download.folder, "btw_kerg.zip" ),
-      exdir = download.folder )
+
+### To use the results of the previous runs just uncomment the
+### following lines.
+## URL pointing to the zip file containing the results of the
+## previous elections.
+## data.previous.url <-
+##   "https://www.bundeswahlleiter.de/dam/jcr/ce2d2b6a-f211-4355-8eea-355c98cd4e47/btw_kerg.zip"
+## Download
+## download.file( url = data.previous.url,
+##               destfile = paste0( download.folder, "btw_kerg.zip" ),
+##               method = "wget" )
+## Extract the data for the election districts
+## unzip( paste0( download.folder, "btw_kerg.zip" ),
+##       exdir = download.folder )
 
 
 ####################################################################
@@ -47,12 +52,33 @@ tidy.data <- function( path.csv ){
   ## The keys of the individual columns are provided in a hierarchical
   ## structure. Therefore they can not be simply read from the file
   ## but have to be added by hand.
-  data.pure <- read_delim( path.csv, delim = ";",
-                          col_types = cols( .default = col_integer(),
-                                           X2 = col_character() ),
-                          col_names = FALSE, skip = 5 )
+  ##
+  ## This function is tailored to work with the 2017 election results.
+  ## Files for previous runs feature a slightly different header.
+  ## Therefore some tiny adjustments to the data import are necessary,
+  ## which I will implement later on.
+  suppressWarnings(
+      data.pure <- read_delim( path.csv, delim = ";",
+                              col_types = cols( .default = col_integer(),
+                                               X2 = col_character() ),
+                              col_names = FALSE, skip = 5 ) )
+      
   ## There are a bunch of error messages for the command above. But the
   ## as far as I can tell all the data is present.
+
+  ## There are some rows in the original data featuring only one single
+  ## semicolon. Thus they result in a row consisting of only NA entries.
+  ## These have to be removed.
+  ## Each election districts must have a unique name and a (unfortunately
+  ## not unique) number. So we will use these first two columns to search
+  ## for the NA rows. If there is an inconsistency, we want the function
+  ## to stop and report about it.
+  data.pure.na.row.1 <- which( is.na( data.pure[[ 1 ]] ) )
+  data.pure.na.row.2 <- which( is.na( data.pure[[ 2 ]] ) )
+  if ( !all( data.pure.na.row.1 == data.pure.na.row.2 ) ){
+    stop( "tidy.data: There is a inconsistency in the rows containing only NA entries" )
+  }
+  data.pure <- data.pure[ -data.pure.na.row.1, ]
   
   ## In addition we have to extract all the strings composing the
   ## header in order to correlate it with the individual columns.
@@ -88,6 +114,12 @@ tidy.data <- function( path.csv ){
                                 data.header.2.filled,
                                 data.header.3.filled, sep = '_' )
 
+  ## Adjusting the first three elements (those, which won't be
+  ## touched during the following reordering)
+  data.header.combined[ 1 ] <- "election.district.number"
+  data.header.combined[ 2 ] <- "election.district.name"
+  data.header.combined[ 3 ] <- "county.number"
+
   ## Now we can assign the column names to our data.
   colnames( data.pure ) <- data.header.combined
 
@@ -98,7 +130,7 @@ tidy.data <- function( path.csv ){
   ## concept of gathering.
   data.gathered <- gather( data.pure,
                           4 : length( data.header.combined ),
-                          key = "county_type-of-vote_confirmation-status",
+                          key = "party_type.of.vote_confirmation.status",
                           value = "counts" )
 
   ## In the step we will separate the combined attributes across
@@ -106,9 +138,55 @@ tidy.data <- function( path.csv ){
   ## See http://r4ds.had.co.nz/tidy-data.html#separate for the
   ## concept of separating.
   data.separated <- separate( data.gathered,
-                             `county_type-of-vote_confirmation-status`,
-                             into = c( "county", "type-of-vote",
-                                      "confirmation-status" ),
+                             `party_type.of.vote_confirmation.status`,
+                             into = c( "party", "type.of.vote",
+                                      "confirmation.status" ),
                              sep = "_" )
 
+  ## You can check the validity of the results by comparing all data
+  ## of one election district against the row in the corresponding
+  ## .csv file.
+  ## filter( data.separated, election.district.name ==
+  ##                         data.separated$election.district.name[ 1 ]
+  ##        )$counts
+
+  ## But be careful about the encoding here! At least for me entering
+  ## the district's name by hand doesn't work for all of the them.
+  ## data.separated$election.district.name[1] == "Flensburg - Schleswig"
+  ## [1] FALSE
+  ## This is caused by a different 'minus sign' in the data.
+  ## data.separated$election.district.name[1] == "Flensburg – Schleswig"
+  ## [1] TRUE
+  ## They appear to be identically but they are not!
+  ## charToRaw(data.separated$election.district.name[1])
+  ## [1] 46 6c 65 6e 73 62 75 72 67 20 e2 80 93 20 53 63 68 6c 65 73 77 69 67
+  ## charToRaw("Flensburg - Schleswig")
+  ## [1] 46 6c 65 6e 73 62 75 72 67 20 2d 20 53 63 68 6c 65 73 77 69 67
+
+  ## This is probably the case since I'm using a Linux machine and the
+  ## document seems to be written in a Windows-based environment.
+  ## guess_encoding( charToRaw( str_c( data.separated$election.district.name,
+  ##                                  collapse = "" ) ) )
+  ##   encoding confidence
+  ##          <chr>      <dbl>
+  ## 1        UTF-8        1.0
+  ## 2 windows-1252        0.3
+
+  ## But most importantly the values match and the tidying is
+  ## complete.
+
+  return( data.separated )
 }
+
+## Extract and tidy data from all files available.
+files.all <- paste0( download.folder, list.files( download.folder ) )
+## We only need the .csv files.
+files.csv <- files.all[ !is.na( str_match( files.all, ".csv" ) ) ]
+
+## For now let's just work with the results of the current election
+file.2017 <- files.csv[ !is.na( str_match( files.csv, "btw17" ) ) ]
+
+## Extract the results and save them to a file.
+current.election <- tidy.data( file.2017 )
+save( current.election, file = paste0( download.folder,
+                                      "current_election.RData" ) )

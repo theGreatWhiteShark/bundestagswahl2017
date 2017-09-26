@@ -1,11 +1,9 @@
-This file contains all the references to the data. 
-
-To save space the data itself won't be present here but just some scripts to download them automatically.
+This file contains all the references to the data as well as the data itself. 
 
 # Data sources
 ### [bundeswahlleiter.de](https://www.bundeswahlleiter.de/bundestagswahlen/2017.html)
-- A **machine-readable** version of the results for [Germany](https://www.bundeswahlleiter.de/dam/jcr/72f186bb-aa56-47d3-b24c-6a46f5de22d0/btw17_kerg.csv). But it's dubbed **preliminary** results. So we have to check the data again at some point.
-- A **machine-reabable** version of the results for each [individual Wahlkreis](https://www.bundeswahlleiter.de/dam/jcr/ce2d2b6a-f211-4355-8eea-355c98cd4e47/btw_kerg.zip). This compilation is **not complete yet**! Just some of the Wahlkreise are present.
+- A **machine-readable** version of the results for the [2017](https://www.bundeswahlleiter.de/dam/jcr/72f186bb-aa56-47d3-b24c-6a46f5de22d0/btw17_kerg.csv) election. This .csv files features the number of votes per election district (e.g. Dresden I and Dresden II). But it's dubbed **preliminary** results. So we have to check the data again at some point.
+- A **machine-readable** version of the results all [previous](https://www.bundeswahlleiter.de/dam/jcr/ce2d2b6a-f211-4355-8eea-355c98cd4e47/btw_kerg.zip) elections for the Bundestag. This .csv files features the number of votes per election district (e.g. Dresden I and Dresden II). But it's dubbed **preliminary** results. So we have to check the data again at some point.
 - Geometrical [shapes](https://www.bundeswahlleiter.de/bundestagswahlen/2017/wahlkreiseinteilung/downloads.html) of the Wahlkreise.
 - The [results](https://www.bundeswahlleiter.de/bundestagswahlen/2017/ergebnisse.html) are delivered as County > Wahlkreis > HTML5 table. Could be extracted using [Scrapy](https://scrapy.org/) but most probably all of it's information is already present in the data mentioned above.
 
