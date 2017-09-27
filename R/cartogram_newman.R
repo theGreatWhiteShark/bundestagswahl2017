@@ -118,7 +118,7 @@ image( density.grid.x, density.grid.y, density.matrix )
 
 
 ###################################################################
-############ Calculating and plotting the cartogram ###############
+####################### calculating the cartogram #################
 ###################################################################
 density.cartogram <- cartogram( density.matrix )
 
@@ -134,26 +134,95 @@ election.districts.df <- left_join( election.districts.df,
                                    select.counts,
                                    by ="election.district.number")
 
+## Now we have two options of obtaining the transformed coordinates
+## of the cartogram.
+##
+## 1. Rcartogram package
+##
 ## Calculating the new coordinates for the vertices in the
-## cartogram.
-cartogram.values <- predict( density.cartogram,
+## cartogram using the wrappers provided by the Rcartogram
+## package.
+cartogram.values.R <- predict( density.cartogram,
                             election.districts.df$long,
                             election.districts.df$lat )
+
+## 2. Newman's pure C code
+##
+## As an alternative I provided the original C code of Newman in
+## version 1.2.2 http://www-personal.umich.edu/~mejn/cart/download/
+## As a prerequisite we have to create an auxiliary folder, copy and
+## and compile the C files, and write both the density matrix and the
+## coordinates of the election districts to disk. After the
+## transformation we will delete this folder.
+dir.create( "tmp" )
+file.copy( c( "../c/main.c", "../c/cart.c", "../c/cart.h",
+             "../c/interp.c" ), to = "tmp/" )
+setwd( "tmp" )
+
+## Compile the C source. For more detailed information see
+## http://www-personal.umich.edu/~mejn/cart/doc/
+system2( "gcc", args = "-O -o cart cart.c main.c -lfftw3 -lm" )
+system2( "gcc", args = "-O -o interp interp.c" )
+
+## Write the density matrix and the election districts to disk
+write( t( density.matrix ), "densityMatrix.dat",
+      ncolumns = number.of.grid.points.x )
+positions.election.districts.matrix <- as.matrix(
+    select( election.districts.df, long, lat ) )
+## This is an incredibly inefficient way of reshaping the matrix
+## but in order to process the positions as a stream it is necessary.
+positions.election.districts <- Reduce(
+    c, apply( positions.election.districts.matrix, 1, c ) )
+write( positions.election.districts, file = "districts.dat",
+      ncolumns = 2 )
+
+## Calculate the transformed density
+system2( "./cart",
+        args = paste( number.of.grid.points.y,
+                     number.of.grid.points.x,
+                     "densityMatrix.dat densityTransformed.dat" ) )
+## Transform the vertices of the election districts
+system2( "cat",
+        args = paste( "districts.dat | ./interp",
+                     number.of.grid.points.y,
+                     number.of.grid.points.x,
+                     "densityTransformed.dat > districtsTransformed.dat" ) )
+
+## Import the transformed election district data into R
+cartogram.values.c <- read.table( "districtsTransformed.dat",
+                                 header = FALSE, row.names = NULL )
+
+## Cleanup
+setwd( ".." )
+unlink( "tmp" )
+
+###################################################################
+######################## Plotting the results #####################
+###################################################################
+
 ## Combining the results into a data.frame
-cartogram.df <- data.frame( long = cartogram.values[ , 1 ],
-                           lat = cartogram.values[ , 2 ],
+cartogram.df.R <- data.frame( long = cartogram.values.R[ , 1 ],
+                           lat = cartogram.values.R[ , 2 ],
+                           group = election.districts.df$group,
+                           counts = election.districts.df$counts )
+## Combining the results into a data.frame
+cartogram.df.c <- data.frame( long = cartogram.values.c[[ 1 ]],
+                           lat = cartogram.values.c[[ 2 ]],
                            group = election.districts.df$group,
                            counts = election.districts.df$counts )
 
 ## and compare it to the default plot.
 plot.total <- data.frame(
-    long = c( election.districts.df$long, cartogram.df$long ),
-    lat = c( election.districts.df$lat, cartogram.df$lat ),
-    counts = c( election.districts.df$counts, cartogram.df$counts ),
-    group = c( election.districts.df$group, cartogram.df$group ),
+    long = c( election.districts.df$long, cartogram.df.R$long,
+             cartogram.df.c$long),
+    lat = c( election.districts.df$lat, cartogram.df.R$lat,
+            cartogram.df.c$lat ),
+    counts = c( election.districts.df$counts, rep( cartogram.df.R$counts, 2 ) ),
+    group = c( election.districts.df$group, rep( cartogram.df.R$group, 2 ) ),
     type = factor( c( rep( "default", nrow( election.districts.df ) ),
-                        rep( "cartogram", nrow( cartogram.df ) ) ),
-                     levels = c( "default", "cartogram" ) ) )
+                        rep( "Rcartogram", nrow( cartogram.df.R ) ),
+                        rep( "cart c function", nrow( cartogram.df.R ) ) ),
+                     levels = c( "default", "Rcartogram", "cart c function" ) ) )
 
 ggplot() + geom_polygon( data = plot.total,
                           aes( x = long, y = lat, group = group,
@@ -162,4 +231,5 @@ ggplot() + geom_polygon( data = plot.total,
 coord_quickmap() + theme_minimal() + xlab( "" ) + ylab( "" ) +
   scale_alpha_continuous( guide = FALSE ) +
   facet_wrap(~ type )
-ggsave( "res/cartogram_newman_die_linke.png" )
+
+ggsave( "../res/cartogram_newman_die_linke.png" )
