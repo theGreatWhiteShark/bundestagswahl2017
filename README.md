@@ -10,7 +10,7 @@ The [data](data) folder will contain all the references and scripts to download,
 
 # R
 
-The [cartogram_newman.R](R/cartogram_newman.R) script uses the diffusion-based method of Mark Newman et al. to produce a cartograms from the election results and the polygons of the election districts.
+The document [cartogram_newman.md](R/cartogram_newman.md) guides you through the generation of cartograms using the original source code of Mark Newman's diffusion map-bases approach.
 
 # c
 

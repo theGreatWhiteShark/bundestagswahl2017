@@ -1,0 +1,344 @@
+This file handles the generation of the cartogram according to Mark
+Newman's [algorithm](http://www-personal.umich.edu/~mejn/cart/) and the
+corresponding R implementation.
+
+Prerequisites
+=============
+
+First you have to load the required packages R packages and all shape
+data of the election districts.
+
+    library( devtools ) # To install the package from Github
+    library( ggplot2 ) # For plotting the results
+    library( dplyr ) # For reshaping and selecting the election results
+    library( rgdal ) # For importing the shape files
+    library( maptools ) # and their handling
+
+    ## Loading the election results.
+    load( "../data/bundeswahlleiter/current_election.RData" )
+
+    ## Import the shape files
+    election.districts <- readOGR( dsn = "../data/bundeswahlleiter/.",
+                                  layer = "Geometrie_Wahlkreise_19DBT_geo",
+                                  p4s = NULL )
+
+    ## OGR data source with driver: ESRI Shapefile 
+    ## Source: "../data/bundeswahlleiter/.", layer: "Geometrie_Wahlkreise_19DBT_geo"
+    ## with 299 features
+    ## It has 4 fields
+
+    ## Converting the spatial object into a data.frame better suited
+    ## for the 'ggplot2' package.
+    election.districts.df <- fortify( election.districts )
+
+    ## Regions defined for each Polygons
+
+### Installing the libfftw3 package (Linux users)
+
+Before we can install this package we need to do a little bit of
+configuration. The package itself links against the *fftw.h* header of
+the **libfftw3** package. It's most probably already installed on your
+system. But for some reason the installation fails since the package is
+ill-configured. Therefore we have to download its source code,
+reconfigure it using the *--enable-shared* option, and compile and
+install it ourselves. Don't be afraid. The worst thing that could happen
+here is for your R package to break after a dist. upgrade of your
+system. But be sure to compile and install the libfftw3 package in a
+folder you won't touch or remove in the future! Else your system can not
+access its functions anymore.
+
+Depending on your system a different version of the libfftw3 package
+might be installed.
+
+    apt search fftw3 | grep libfftw3
+
+    ## 
+    ## WARNING: apt does not have a stable CLI interface yet. Use with caution in scripts.
+    ## 
+    ## libfftw3-3/stable,now 3.3.4-2 amd64 [installed,automatic]
+    ## libfftw3-bin/stable,now 3.3.4-2 amd64 [installed,automatic]
+    ## libfftw3-dbg/stable 3.3.4-2 amd64
+    ## libfftw3-dev/stable,now 3.3.4-2 amd64 [installed]
+    ## libfftw3-doc/stable 3.3.4-2 all
+    ## libfftw3-double3/stable,now 3.3.4-2 amd64 [installed,automatic]
+    ## libfftw3-long3/stable,now 3.3.4-2 amd64 [installed,automatic]
+    ## libfftw3-mpi-dev/stable 3.3.4-2 amd64
+    ## libfftw3-mpi3/stable 3.3.4-2 amd64
+    ## libfftw3-quad3/stable,now 3.3.4-2 amd64 [installed,automatic]
+    ## libfftw3-single3/stable,now 3.3.4-2 amd64 [installed,automatic]
+
+The package we are looking for is usually the first one appearing. It
+should contain the basename *libfftw3* and maybe an additional number
+attached using a dash, but definitely no characters like 'dev', 'dbg'
+etc!
+
+Now let's download its source code, reconfigure, recompile, and re-
+install it.
+
+    # Download the package source
+    # sudo apt source libfftw3-3
+    # Reconfigure the package with the fftw.h available to link against
+    # sudo ./configure --enable-shared
+    # Compile the package
+    # sudo make
+    # Installation
+    # sudo make install
+
+### Install the Rcartogram package
+
+Now we can head over to R again to install the Rcartogram Since it's not
+on CRAN we will use the most recent Github version.
+
+    install_github( "omegahat/Rcartogram" )
+
+    ## Skipping install of 'Rcartogram' from a github remote, the SHA1 (b1f4a80e) has not changed since last install.
+    ##   Use `force = TRUE` to force installation
+
+    require( Rcartogram )
+
+Density generation
+==================
+
+The package's code is a port to Newman's [original C
+version](http://www-personal.umich.edu/~mejn/cart/doc/) of the
+algorithm. The basic ingredient we need here is a density map on a
+regular grid containing the election results per election district. This
+map we will afterwards embed in a 'sea' of the overall average value of
+quite generous size.
+
+We will extract the overall range of the polygons of the election
+districts and make the size of the grid explicit.
+
+    election.districts.range <- election.districts@bbox
+    number.of.grid.points.y <- 1024
+    number.of.grid.points.x <- round( number.of.grid.points.y/ 2 )
+
+Since I had the impression that bigger ranges result in less distortion
+we span an uniform grid of points covering the very range of the
+election districts. We will use the SpatialPoints object instead of a
+data.frame here, since the use of a spatial object defined in the **sp**
+package is required by the **over** function we'll use in the next step.
+This function checks if a supplied point falls within a polygon. The
+output of this function we will use to associate our grid point with the
+number of votes for the election districts they belong to.
+
+    density.grid.x <-  seq( election.districts.range[ 1, 1 ],
+                           election.districts.range[ 1, 2 ],
+                           length.out = number.of.grid.points.x )
+    density.grid.y <-  seq( election.districts.range[ 2, 1 ],
+                           election.districts.range[ 2, 2 ],
+                           length.out = number.of.grid.points.y )
+    density.grid <- SpatialPoints( expand.grid(
+        density.grid.x, density.grid.y ),
+        proj4string = election.districts@proj4string )
+
+    ## Check which point falls within which polygon/election
+    ## district.
+    density.point.in.polygon <- over( density.grid, election.districts )
+    ## Collect the results in a data.frame
+    density.df <- data.frame(
+        x = density.grid@coords[ , 1 ], y = density.grid@coords[ , 2 ],
+        election.district.number =
+          as.numeric( as.character(
+              density.point.in.polygon$WKR_NR ) ) )
+
+as.numeric( as.character( ... ) )? Well, without the conversion to
+character the numerical conversion will output wrong number in the right
+range resulting in a wrong distribution of the election districts. Those
+are the most \*\*\*\*\* bugs.
+
+For this example let's plot the preliminary second votes for the leftist
+party again.
+
+    ## This code chunk does not really depend on the last but
+    ## on even earlier ones, but let's be simple and linear in here
+    select.party <- "DIE LINKE"
+    select.type.of.vote <- "Zweitstimmen"
+    select.confirmation.status <- "Vorläufig"
+    select.counts <- select(
+        filter( current.election,
+               party == select.party &
+               type.of.vote == select.type.of.vote &
+               confirmation.status == select.confirmation.status &
+               county.number != 99 ),
+        election.district.number, counts )
+
+In addition we have to prepare the election district data object. We
+convert it into a data.frame holding only the coordinates of the
+polygons' vertices, increment the *id* key to represent the number of
+the election district, and use it to relate our shapes to the number of
+votes we just filtered.
+
+    election.districts.df <- fortify( election.districts )
+
+    ## Regions defined for each Polygons
+
+    ## Convert the IDs of the polygons to the same key used to
+    ## identify the election districts.
+    election.districts.df$election.district.number <-
+      as.numeric( election.districts.df$id ) + 1
+
+    ## Add the counts to all points of the corresponding polygons
+    election.districts.df <- left_join( election.districts.df,
+                                       select.counts,
+                                       by ="election.district.number")
+
+In a similar manner we will now relate number of votes to the grid
+points we got from the previous point in polygon test. In addition we
+will replace all missing values for grid points belonging to no election
+district by the mean number of votes for the leftist party.
+
+    ## Assign the corresponding number of votes to the election
+    ## district the individual points did fall into.
+    density.df <- left_join( density.df, select.counts,
+                            by = "election.district.number" )
+
+    ## Fill all NA in the number of votes with the mean value.
+    ## This is what the authors called the 'sea'.
+    density.df$counts[ is.na( density.df$counts ) ] <-
+      mean( density.df$counts, na.rm = TRUE )
+
+And do a short visual check of the density map using the **ggplot2**
+package.
+
+    ggplot( data = density.df ) +
+      geom_tile( aes( x = x, y = y, alpha = counts ),
+                fill = '#df0404' ) +
+    coord_quickmap() + theme_minimal() + xlab( "" ) + ylab( "" ) +
+      scale_alpha_continuous( guide = FALSE )
+
+![](cartogram_newman_files/figure-markdown_strict/unnamed-chunk-3-1.png)
+Alright, everything looks fine.
+
+All that left to do is to convert the density into matrix.
+
+    density.matrix <- matrix( as.numeric( density.df$counts ),
+                             nrow = number.of.grid.points.x,
+                             ncol = number.of.grid.points.y )
+
+    ## These intermediate step you can visualize using e.g
+    ## image( density.grid.x, density.grid.y, density.matrix )
+
+Calculating the cartogram
+=========================
+
+### Using the Rcartogram package
+
+The most easy and straight forward interface to Mark Newman's code is of
+course the Rcartogram package.
+
+We will use it the calculate the transformed density
+
+    density.cartogram <- cartogram( density.matrix )
+
+and use the *predict()* function to obtain the polygons of the election
+districts in the transformed density.
+
+    cartogram.values.R <- predict( density.cartogram,
+                                election.districts.df$long,
+                                election.districts.df$lat )
+
+### Using Newman's pure C code
+
+As an alternative I provided the original C code of Newman [version
+1.2.2](http://www-personal.umich.edu/~mejn/cart/download/). As a
+prerequisite we have to create an auxiliary folder, copy and and compile
+the C files, and write both the density matrix and the coordinates of
+the election districts to disk. After the transformation we will delete
+this folder.
+
+    dir.create( "tmp" )
+
+    ## Warning in dir.create("tmp"): 'tmp' already exists
+
+    file.copy( c( "../c/main.c", "../c/cart.c", "../c/cart.h",
+                 "../c/interp.c" ), to = "tmp/" )
+
+    ## [1] FALSE FALSE FALSE FALSE
+
+    setwd( "tmp" )
+
+    ## Compile the C source. For more detailed information see
+    ## http://www-personal.umich.edu/~mejn/cart/doc/
+    system2( "gcc", args = "-O -o cart cart.c main.c -lfftw3 -lm" )
+    system2( "gcc", args = "-O -o interp interp.c" )
+
+    ## Write the density matrix and the election districts to disk
+    write( t( density.matrix ), "densityMatrix.dat",
+          ncolumns = number.of.grid.points.x )
+    positions.election.districts.matrix <- as.matrix(
+        select( election.districts.df, long, lat ) )
+    ## This is an incredibly inefficient way of reshaping the matrix
+    ## but in order to process the positions as a stream it is necessary.
+    positions.election.districts <- Reduce(
+        c, apply( positions.election.districts.matrix, 1, c ) )
+    write( positions.election.districts, file = "districts.dat",
+          ncolumns = 2 )
+
+    ## Calculate the transformed density
+    system2( "./cart",
+            args = paste( number.of.grid.points.y,
+                         number.of.grid.points.x,
+                         "densityMatrix.dat densityTransformed.dat" ) )
+    ## Transform the vertices of the election districts
+    system2( "cat",
+            args = paste( "districts.dat | ./interp",
+                         number.of.grid.points.y,
+                         number.of.grid.points.x,
+                         "densityTransformed.dat > districtsTransformed.dat" ) )
+
+    ## Import the transformed election district data into R
+    cartogram.values.c <- read.table( "districtsTransformed.dat",
+                                     header = FALSE, row.names = NULL )
+
+    ## Cleanup
+    setwd( ".." )
+    unlink( "tmp" )
+
+Plotting the results
+====================
+
+Almost done. Now we will combine the transformed coordinates, their ID
+for the association to a particular polygon, and the election results
+into data.frames. Those we again combine into a final one better suited
+for the plotting procedure.
+
+    ## Combining the results into a data.frame
+    cartogram.df.R <- data.frame( long = cartogram.values.R[[ 1 ]],
+                               lat = cartogram.values.R[[ 2 ]],
+                               group = election.districts.df$group,
+                               counts = election.districts.df$counts )
+    ## Combining the results into a data.frame
+    cartogram.df.c <- data.frame( long = cartogram.values.c[[ 1 ]],
+                               lat = cartogram.values.c[[ 2 ]],
+                               group = election.districts.df$group,
+                               counts = election.districts.df$counts )
+
+    ## and compare it to the default plot.
+    plot.total <- data.frame(
+        long = c( election.districts.df$long, cartogram.df.R$long,
+                 cartogram.df.c$long),
+        lat = c( election.districts.df$lat, cartogram.df.R$lat,
+                cartogram.df.c$lat ),
+        counts = c( election.districts.df$counts, rep( cartogram.df.R$counts, 2 ) ),
+        group = c( election.districts.df$group, rep( cartogram.df.R$group, 2 ) ),
+        type = factor( c( rep( "default", nrow( election.districts.df ) ),
+                            rep( "Rcartogram", nrow( cartogram.df.R ) ),
+                            rep( "cart c function", nrow( cartogram.df.R ) ) ),
+                      levels = c( "default", "Rcartogram", "cart c function" ) ) )
+
+Finally we plot the results.
+
+    ggplot() + geom_polygon( data = plot.total,
+                              aes( x = long, y = lat, group = group,
+                                  alpha = counts ),
+                            colour = "black", fill = "#df0404" ) +
+    coord_quickmap() + theme_minimal() + xlab( "" ) + ylab( "" ) +
+      scale_alpha_continuous( guide = FALSE ) +
+      facet_wrap(~ type )
+
+![](cartogram_newman_files/figure-markdown_strict/unnamed-chunk-4-1.png)
+
+    ggsave( "../res/cartogram_newman_die_linke.png" )
+
+    ## Saving 7 x 5 in image
