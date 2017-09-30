@@ -16,10 +16,10 @@ library( rgdal ) # For importing the shape files
 library( maptools ) # and their handling
 
 ## Loading the election results.
-load( "data/bundeswahlleiter/current_election.RData" )
+load( "../data/bundeswahlleiter/current_election.RData" )
 
 ## Import the shape files
-election.districts <- readOGR( dsn = "data/bundeswahlleiter/.",
+election.districts <- readOGR( dsn = "../data/bundeswahlleiter/.",
                               layer = "Geometrie_Wahlkreise_19DBT_geo",
                               p4s = NULL )
 
@@ -27,9 +27,45 @@ election.districts <- readOGR( dsn = "data/bundeswahlleiter/.",
 ## for the 'ggplot2' package.
 election.districts.df <- fortify( election.districts )
 
-## Installing the Rcartogram package. Since it's not on CRAN we will
-## use my Github fork. (The predict.Cartogram method of the original
-## one is erroneous)
+## Installing the Rcartogram package. (Linux users)
+## Before we can install this package we need to do a little bit of
+## configuration. The package itself links against the *fftw.h* header
+## of the libfftw3 package. It's most probably already installed on your
+## system. But for some reason the installation fails since the package
+## is ill-configured. Therefore we have to download its source code,
+## reconfigure it using the *--enable-shared* option, and compile and
+## install it ourselves.
+## Don't be afraid. The worst thing that could happen here is for your
+## R package to break after a dist. upgrade of your system. But be sure
+## to compile and install the libfftw3 package in a folder you won't
+## touch or remove in the future! Else your system can not access its
+## functions anymore.
+
+## Depending on your system a different version of the libfftw3 package
+## might be installed.
+```{bash}
+apt search fftw3 | grep libfftw3
+```
+## The package we are looking for is usually the first one appearing. It
+## should contain the basename *libfftw3* and maybe an additional number
+## attached using a dash, but definitely no characters like 'dev', 'dbg'
+## etc!
+
+## Now let's download its source code, reconfigure, recompile, and re-
+## install it.
+```{bash}
+# Download the package source
+sudo apt source libfftw3-3
+# Reconfigure the package with the fftw.h available to link against
+sudo ./configure --enable-shared
+# Compile the package
+sudo make
+# Installation
+sudo make install
+```
+## Now we can head over to R again to install the Rcartogram package.
+## Since it's not on CRAN we will use my Github fork. (The
+## predict.Cartogram method of the original one is erroneous)
 install_github( "theGreatWhiteShark/Rcartogram" )
 
 ###################################################################
