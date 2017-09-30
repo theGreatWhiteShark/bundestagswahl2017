@@ -57,13 +57,13 @@ Now let's download its source code, reconfigure, recompile, and re-
 install it.
 ```{bash}
 # Download the package source
-# sudo apt source libfftw3-3
+sudo apt source libfftw3-3
 # Reconfigure the package with the fftw.h available to link against
-# sudo ./configure --enable-shared
+sudo ./configure --enable-shared
 # Compile the package
-# sudo make
+sudo make
 # Installation
-# sudo make install
+sudo make install
 ```
 
 ### Install the Rcartogram package
