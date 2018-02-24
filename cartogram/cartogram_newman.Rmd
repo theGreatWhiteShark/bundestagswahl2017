@@ -223,8 +223,8 @@ coordinates of the election districts to disk. After the
 transformation we will delete this folder.
 ```{r "cartogram-c",dependson="cartogram-r"}
 dir.create( "tmp" )
-file.copy( c( "../c/main.c", "../c/cart.c", "../c/cart.h",
-             "../c/interp.c" ), to = "tmp/" )
+file.copy( c( "../src/main.c", "../src/cart.c", "../src/cart.h",
+             "../src/interp.c" ), to = "tmp/" )
 setwd( "tmp" )
 
 ## Compile the C source. For more detailed information see
