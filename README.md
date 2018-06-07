@@ -1,3 +1,7 @@
+I'm leaving this sinking ship. If you like this project, checked out the maintained version on [GitLab.com](https://gitlab.com/theGreatWhiteShark/bundestagswahl2017).
+
+---
+
 ![left-winged-Germay](res/cartogram_newman_die_linke.png)
 
 This project started with a spontaneous and somewhat bold idea. While
